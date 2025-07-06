@@ -1,0 +1,258 @@
+)<!DOCTYPE html>
+<html lang="ur">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Abdullah ki Shop - Order Now</title>
+    <!-- Bootstrap CSS for styling -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { background-color: #f8f9fa; }
+        .container { max-width: 1200px; }
+        .menu-item-card { margin-bottom: 1.5rem; }
+        .cart-section { 
+            position: sticky; 
+            top: 20px; 
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        #tableNumberSection {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 80vh;
+        }
+         #mainContent { display: none; }
+    </style>
+</head>
+<body>
+
+    <nav class="navbar navbar-dark bg-dark">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="#">Welcome to Abdullah ki Shop</a>
+        </div>
+    </nav>
+    
+    <!-- Table Number Input Section -->
+    <div id="tableNumberSection">
+        <div class="text-center p-4 bg-white rounded shadow-sm">
+            <h2>Please Enter Your Table Number</h2>
+            <form id="tableNumberForm" class="d-flex mt-3">
+                 <input type="number" id="tableNumberInput" class="form-control me-2" placeholder="e.g., 5" required>
+                 <button type="submit" class="btn btn-primary">Start</button>
+            </form>
+        </div>
+    </div>
+
+
+    <!-- Main Content: Menu, Cart, Messaging -->
+    <div id="mainContent" class="container mt-4">
+        <div class="alert alert-success" id="welcomeMessage" role="alert"></div>
+        <div class="row">
+            <!-- Menu Catalog -->
+            <div class="col-md-8">
+                <h2>Our Menu</h2>
+                <div id="menuCatalog" class="row">
+                    <!-- Menu items will be loaded here -->
+                </div>
+            </div>
+
+            <!-- Cart and Messaging -->
+            <div class="col-md-4">
+                <div class="cart-section">
+                    <h4>Your Order</h4>
+                    <ul id="cartItems" class="list-group list-group-flush">
+                        <!-- Cart items will be displayed here -->
+                    </ul>
+                    <h5 class="mt-3">Total: Rs. <span id="cartTotal">0</span></h5>
+                    <button id="placeOrderBtn" class="btn btn-success w-100 mt-3" disabled>Place Order</button>
+                    <hr>
+                    <h6>Need Something?</h6>
+                     <div class="input-group">
+                        <input type="text" id="userMessage" class="form-control" placeholder="e.g., Paani bhej dain...">
+                        <button id="sendMessageBtn" class="btn btn-outline-secondary">Send</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Order Success Modal -->
+    <div class="modal fade" id="successModal" tabindex="-1">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">Success!</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body">
+            <p>Aapka order place ho gaya hai. Jald hi aapke table par serve kiya jayega.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Firebase SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-database-compat.js"></script>
+    <!-- Bootstrap JS for Modal -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+
+    <script>
+        // Your web app's Firebase configuration
+        const firebaseConfig = {
+            apiKey: "AIzaSyCb48Fm62f268l_ZmuOCdqW1RJ-JsTxiCg",
+            authDomain: "web-app-ultra.firebaseapp.com",
+            databaseURL: "https://web-app-ultra-default-rtdb.firebaseio.com",
+            projectId: "web-app-ultra",
+            storageBucket: "web-app-ultra.firebasestorage.app",
+            messagingSenderId: "558048077412",
+            appId: "1:558048077412:web:215f6ab51ada36cfd1e171"
+        };
+
+        // Initialize Firebase
+        firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth();
+        const db = firebase.database();
+        const serverTimestamp = firebase.database.ServerValue.TIMESTAMP;
+        
+        let cart = [];
+        let tableNumber = null;
+        const successModal = new bootstrap.Modal(document.getElementById('successModal'));
+
+        // --- Authentication and Initial Setup ---
+        auth.signInAnonymously().catch(error => console.error("Anonymous Sign-in Error:", error));
+
+        auth.onAuthStateChanged(user => {
+            if (user) {
+                console.log("User signed in anonymously. UID:", user.uid);
+                loadMenu();
+            }
+        });
+        
+        document.getElementById('tableNumberForm').addEventListener('submit', function(e){
+            e.preventDefault();
+            const input = document.getElementById('tableNumberInput');
+            if(input.value) {
+                tableNumber = input.value;
+                document.getElementById('tableNumberSection').style.display = 'none';
+                document.getElementById('mainContent').style.display = 'block';
+                document.getElementById('welcomeMessage').innerText = `Welcome! You are ordering from Table #${tableNumber}.`;
+            }
+        });
+
+        // --- Menu Functions ---
+        function loadMenu() {
+            const menuRef = db.ref('menu');
+            menuRef.on('value', (snapshot) => {
+                const menuCatalog = document.getElementById('menuCatalog');
+                menuCatalog.innerHTML = '';
+                snapshot.forEach((childSnapshot) => {
+                    const item = childSnapshot.val();
+                    const itemKey = childSnapshot.key;
+                    
+                    const menuItemDiv = document.createElement('div');
+                    menuItemDiv.className = 'col-md-6';
+                    menuItemDiv.innerHTML = `
+                        <div class="card menu-item-card">
+                            <div class="card-body">
+                                <h5 class="card-title">${item.name}</h5>
+                                <p class="card-text">${item.description}</p>
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <strong>Rs. ${item.price}</strong>
+                                    <button class="btn btn-primary btn-sm" onclick="addToCart('${itemKey}', '${item.name}', ${item.price})">Add to Order</button>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                    menuCatalog.appendChild(menuItemDiv);
+                });
+            });
+        }
+        
+        // --- Cart Functions ---
+        function addToCart(key, name, price) {
+            const existingItem = cart.find(item => item.key === key);
+            if (existingItem) {
+                existingItem.quantity++;
+            } else {
+                cart.push({ key, name, price, quantity: 1 });
+            }
+            renderCart();
+        }
+
+        function renderCart() {
+            const cartItems = document.getElementById('cartItems');
+            const cartTotal = document.getElementById('cartTotal');
+            const placeOrderBtn = document.getElementById('placeOrderBtn');
+            cartItems.innerHTML = '';
+            let total = 0;
+
+            cart.forEach((item, index) => {
+                const li = document.createElement('li');
+                li.className = 'list-group-item d-flex justify-content-between align-items-center';
+                li.innerHTML = `
+                    <span>${item.name} x ${item.quantity}</span>
+                    <span>Rs. ${item.price * item.quantity}</span>
+                `;
+                cartItems.appendChild(li);
+                total += item.price * item.quantity;
+            });
+
+            cartTotal.innerText = total;
+            placeOrderBtn.disabled = cart.length === 0;
+        }
+
+        // --- Order and Message Functions ---
+        document.getElementById('placeOrderBtn').addEventListener('click', function() {
+            if (cart.length === 0 || !tableNumber) {
+                alert('Please add items to your cart and set table number first!');
+                return;
+            }
+
+            const order = {
+                tableNumber: tableNumber,
+                items: cart,
+                totalAmount: Number(document.getElementById('cartTotal').innerText),
+                status: 'pending',
+                timestamp: serverTimestamp
+            };
+            
+            db.ref('orders').push(order)
+                .then(() => {
+                    successModal.show();
+                    cart = []; // Clear the cart
+                    renderCart(); // Update the UI
+                })
+                .catch(error => console.error("Order failed:", error));
+        });
+
+        document.getElementById('sendMessageBtn').addEventListener('click', function() {
+            const messageInput = document.getElementById('userMessage');
+            const messageText = messageInput.value.trim();
+
+            if (!messageText || !tableNumber) {
+                alert("Please write a message and ensure table number is set.");
+                return;
+            }
+
+            const message = {
+                tableNumber: tableNumber,
+                message: messageText,
+                timestamp: serverTimestamp
+            };
+
+            db.ref('messages').push(message)
+                .then(() => {
+                    messageInput.value = ''; // Clear input field
+                    alert("Message sent!");
+                })
+                .catch(error => console.error("Message sending failed:", error));
+        });
+
+    </script>
+</body>
+</html>
